@@ -4,6 +4,9 @@ use shared::fees::{FeeManager, FeeError};
 use shared::governance::{
     GovernanceManager, GovernanceRole, UpgradeProposal,
 };
+use shared::events::{
+    EventEmitter, TradeExecutedEvent, ContractPausedEvent, ContractUnpausedEvent, FeeCollectedEvent,
+};
 
 /// Version of this contract implementation
 const CONTRACT_VERSION: u32 = 1;
@@ -141,6 +144,17 @@ impl UpgradeableTradingContract {
         // Collect fee first
         FeeManager::collect_fee(&env, &fee_token, &trader, &fee_recipient, fee_amount)?;
 
+        // Emit fee collected event
+        if fee_amount > 0 {
+            EventEmitter::fee_collected(&env, FeeCollectedEvent {
+                payer: trader.clone(),
+                recipient: fee_recipient,
+                amount: fee_amount,
+                token: fee_token.clone(),
+                timestamp: env.ledger().timestamp(),
+            });
+        }
+
         // Create trade record
         let stats_key = symbol_short!("stats");
         let mut stats: TradeStats = env
@@ -154,13 +168,14 @@ impl UpgradeableTradingContract {
             });
 
         let trade_id = stats.last_trade_id + 1;
+        let timestamp = env.ledger().timestamp();
         let trade = Trade {
             id: trade_id,
-            trader,
-            pair,
+            trader: trader.clone(),
+            pair: pair.clone(),
             amount,
             price,
-            timestamp: env.ledger().timestamp(),
+            timestamp,
             is_buy,
         };
 
@@ -182,6 +197,19 @@ impl UpgradeableTradingContract {
         // Update persistent storage
         env.storage().persistent().set(&trades_key, &trades);
         env.storage().persistent().set(&stats_key, &stats);
+
+        // Emit trade executed event
+        EventEmitter::trade_executed(&env, TradeExecutedEvent {
+            trade_id,
+            trader,
+            pair,
+            amount,
+            price,
+            is_buy,
+            fee_amount,
+            fee_token,
+            timestamp,
+        });
 
         Ok(trade_id)
     }
@@ -221,7 +249,7 @@ impl UpgradeableTradingContract {
             .ok_or(TradeError::Unauthorized)?;
 
         let role = roles
-            .get(admin)
+            .get(admin.clone())
             .ok_or(TradeError::Unauthorized)?;
 
         if role != GovernanceRole::Admin {
@@ -230,6 +258,12 @@ impl UpgradeableTradingContract {
 
         let paused_key = symbol_short!("pause");
         env.storage().persistent().set(&paused_key, &true);
+
+        // Emit contract paused event
+        EventEmitter::contract_paused(&env, ContractPausedEvent {
+            paused_by: admin,
+            timestamp: env.ledger().timestamp(),
+        });
 
         Ok(())
     }
@@ -246,7 +280,7 @@ impl UpgradeableTradingContract {
             .ok_or(TradeError::Unauthorized)?;
 
         let role = roles
-            .get(admin)
+            .get(admin.clone())
             .ok_or(TradeError::Unauthorized)?;
 
         if role != GovernanceRole::Admin {
@@ -255,6 +289,12 @@ impl UpgradeableTradingContract {
 
         let paused_key = symbol_short!("pause");
         env.storage().persistent().set(&paused_key, &false);
+
+        // Emit contract unpaused event
+        EventEmitter::contract_unpaused(&env, ContractUnpausedEvent {
+            unpaused_by: admin,
+            timestamp: env.ledger().timestamp(),
+        });
 
         Ok(())
     }

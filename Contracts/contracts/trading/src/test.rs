@@ -3,7 +3,7 @@
 extern crate std;
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, token, Address, Env, Symbol, Vec};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, testutils::Events, token, Address, Env, Symbol, Vec, TryIntoVal};
 use shared::governance::ProposalStatus;
 use shared::fees::FeeError;
 use std::sync::Mutex;
@@ -291,4 +291,298 @@ fn test_reject_and_get_proposal_errors() {
 
     let missing = client.try_get_upgrade_proposal(&999);
     assert_eq!(missing, Err(Ok(TradeError::Unauthorized)));
+}
+
+// =============================================================================
+// Event Emission Tests
+// =============================================================================
+
+#[test]
+fn test_trade_emits_events() {
+    let _guard = serial_lock();
+    let (env, admin, approver, executor, contract_id) = setup_env();
+    let client = UpgradeableTradingContractClient::new(&env, &contract_id);
+    let mut approvers = Vec::new(&env);
+    approvers.push_back(approver);
+    init_contract(&client, &admin, approvers, &executor);
+
+    let (token_id, _token_client, token_admin) = setup_fee_token(&env);
+    let trader = Address::generate(&env);
+    let fee_recipient = Address::generate(&env);
+    let pair = Symbol::new(&env, "XLMUSDC");
+
+    token_admin.mint(&trader, &1000);
+
+    let trade_id = client.trade(
+        &trader,
+        &pair,
+        &250,
+        &10,
+        &true,
+        &token_id,
+        &100,
+        &fee_recipient,
+    );
+
+    assert_eq!(trade_id, 1);
+
+    // Verify events were emitted
+    let events = env.events().all();
+
+    // Should have at least 2 events: fee_collected and trade_executed
+    // (plus any token transfer events)
+    assert!(events.len() >= 2, "Expected at least 2 events, got {}", events.len());
+
+    // Check for trade event topic
+    let has_trade_event = events.iter().any(|(_, topics, _)| {
+        if let Some(first_topic) = topics.first() {
+            let topic_str: Result<Symbol, _> = first_topic.clone().try_into_val(&env);
+            if let Ok(sym) = topic_str {
+                return sym == symbol_short!("trade");
+            }
+        }
+        false
+    });
+    assert!(has_trade_event, "Trade event not found");
+
+    // Check for fee event topic
+    let has_fee_event = events.iter().any(|(_, topics, _)| {
+        if let Some(first_topic) = topics.first() {
+            let topic_str: Result<Symbol, _> = first_topic.clone().try_into_val(&env);
+            if let Ok(sym) = topic_str {
+                return sym == symbol_short!("fee");
+            }
+        }
+        false
+    });
+    assert!(has_fee_event, "Fee event not found");
+}
+
+#[test]
+fn test_pause_emits_event() {
+    let _guard = serial_lock();
+    let (env, admin, approver, executor, contract_id) = setup_env();
+    let client = UpgradeableTradingContractClient::new(&env, &contract_id);
+    let mut approvers = Vec::new(&env);
+    approvers.push_back(approver);
+    init_contract(&client, &admin, approvers, &executor);
+
+    client.pause(&admin);
+
+    let events = env.events().all();
+
+    // Check for paused event
+    let has_pause_event = events.iter().any(|(_, topics, _)| {
+        if let Some(first_topic) = topics.first() {
+            let topic_str: Result<Symbol, _> = first_topic.clone().try_into_val(&env);
+            if let Ok(sym) = topic_str {
+                return sym == symbol_short!("paused");
+            }
+        }
+        false
+    });
+    assert!(has_pause_event, "Pause event not found");
+}
+
+#[test]
+fn test_unpause_emits_event() {
+    let _guard = serial_lock();
+    let (env, admin, approver, executor, contract_id) = setup_env();
+    let client = UpgradeableTradingContractClient::new(&env, &contract_id);
+    let mut approvers = Vec::new(&env);
+    approvers.push_back(approver);
+    init_contract(&client, &admin, approvers, &executor);
+
+    client.pause(&admin);
+    client.unpause(&admin);
+
+    let events = env.events().all();
+
+    // Check for unpause event
+    let has_unpause_event = events.iter().any(|(_, topics, _)| {
+        if let Some(first_topic) = topics.first() {
+            let topic_str: Result<Symbol, _> = first_topic.clone().try_into_val(&env);
+            if let Ok(sym) = topic_str {
+                return sym == symbol_short!("unpause");
+            }
+        }
+        false
+    });
+    assert!(has_unpause_event, "Unpause event not found");
+}
+
+#[test]
+fn test_governance_proposal_emits_events() {
+    let _guard = serial_lock();
+    let (env, admin, approver, executor, contract_id) = setup_env();
+    let client = UpgradeableTradingContractClient::new(&env, &contract_id);
+    let mut approvers = Vec::new(&env);
+    approvers.push_back(approver.clone());
+    init_contract(&client, &admin, approvers.clone(), &executor);
+
+    // Create proposal
+    let _proposal_id = client.propose_upgrade(
+        &admin,
+        &symbol_short!("v2hash"),
+        &symbol_short!("Upgrade"),
+        &approvers,
+        &1,
+        &3600,
+    );
+
+    let events = env.events().all();
+
+    // Check for proposal created event
+    let has_propose_event = events.iter().any(|(_, topics, _)| {
+        if let Some(first_topic) = topics.first() {
+            let topic_str: Result<Symbol, _> = first_topic.clone().try_into_val(&env);
+            if let Ok(sym) = topic_str {
+                return sym == symbol_short!("propose");
+            }
+        }
+        false
+    });
+    assert!(has_propose_event, "Proposal created event not found");
+}
+
+#[test]
+fn test_governance_approval_emits_event() {
+    let _guard = serial_lock();
+    let (env, admin, approver, executor, contract_id) = setup_env();
+    let client = UpgradeableTradingContractClient::new(&env, &contract_id);
+    let mut approvers = Vec::new(&env);
+    approvers.push_back(approver.clone());
+    init_contract(&client, &admin, approvers.clone(), &executor);
+
+    let proposal_id = client.propose_upgrade(
+        &admin,
+        &symbol_short!("v2hash"),
+        &symbol_short!("Upgrade"),
+        &approvers,
+        &1,
+        &3600,
+    );
+
+    client.approve_upgrade(&proposal_id, &approver);
+
+    let events = env.events().all();
+
+    // Check for approval event
+    let has_approve_event = events.iter().any(|(_, topics, _)| {
+        if let Some(first_topic) = topics.first() {
+            let topic_str: Result<Symbol, _> = first_topic.clone().try_into_val(&env);
+            if let Ok(sym) = topic_str {
+                return sym == symbol_short!("approve");
+            }
+        }
+        false
+    });
+    assert!(has_approve_event, "Approval event not found");
+}
+
+#[test]
+fn test_governance_execution_emits_event() {
+    let _guard = serial_lock();
+    let (env, admin, approver, executor, contract_id) = setup_env();
+    let client = UpgradeableTradingContractClient::new(&env, &contract_id);
+    let mut approvers = Vec::new(&env);
+    approvers.push_back(approver.clone());
+    init_contract(&client, &admin, approvers.clone(), &executor);
+
+    let proposal_id = client.propose_upgrade(
+        &admin,
+        &symbol_short!("v2hash"),
+        &symbol_short!("Upgrade"),
+        &approvers,
+        &1,
+        &3600,
+    );
+
+    client.approve_upgrade(&proposal_id, &approver);
+    set_timestamp(&env, 1000 + 3601);
+    client.execute_upgrade(&proposal_id, &executor);
+
+    let events = env.events().all();
+
+    // Check for execute event
+    let has_execute_event = events.iter().any(|(_, topics, _)| {
+        if let Some(first_topic) = topics.first() {
+            let topic_str: Result<Symbol, _> = first_topic.clone().try_into_val(&env);
+            if let Ok(sym) = topic_str {
+                return sym == symbol_short!("execute");
+            }
+        }
+        false
+    });
+    assert!(has_execute_event, "Execute event not found");
+}
+
+#[test]
+fn test_governance_rejection_emits_event() {
+    let _guard = serial_lock();
+    let (env, admin, approver, executor, contract_id) = setup_env();
+    let client = UpgradeableTradingContractClient::new(&env, &contract_id);
+    let mut approvers = Vec::new(&env);
+    approvers.push_back(approver.clone());
+    init_contract(&client, &admin, approvers.clone(), &executor);
+
+    let proposal_id = client.propose_upgrade(
+        &admin,
+        &symbol_short!("v2hash"),
+        &symbol_short!("Upgrade"),
+        &approvers,
+        &1,
+        &3600,
+    );
+
+    client.reject_upgrade(&proposal_id, &approver);
+
+    let events = env.events().all();
+
+    // Check for reject event
+    let has_reject_event = events.iter().any(|(_, topics, _)| {
+        if let Some(first_topic) = topics.first() {
+            let topic_str: Result<Symbol, _> = first_topic.clone().try_into_val(&env);
+            if let Ok(sym) = topic_str {
+                return sym == symbol_short!("reject");
+            }
+        }
+        false
+    });
+    assert!(has_reject_event, "Reject event not found");
+}
+
+#[test]
+fn test_governance_cancellation_emits_event() {
+    let _guard = serial_lock();
+    let (env, admin, approver, executor, contract_id) = setup_env();
+    let client = UpgradeableTradingContractClient::new(&env, &contract_id);
+    let mut approvers = Vec::new(&env);
+    approvers.push_back(approver.clone());
+    init_contract(&client, &admin, approvers.clone(), &executor);
+
+    let proposal_id = client.propose_upgrade(
+        &admin,
+        &symbol_short!("v2hash"),
+        &symbol_short!("Upgrade"),
+        &approvers,
+        &1,
+        &3600,
+    );
+
+    client.cancel_upgrade(&proposal_id, &admin);
+
+    let events = env.events().all();
+
+    // Check for cancel event
+    let has_cancel_event = events.iter().any(|(_, topics, _)| {
+        if let Some(first_topic) = topics.first() {
+            let topic_str: Result<Symbol, _> = first_topic.clone().try_into_val(&env);
+            if let Ok(sym) = topic_str {
+                return sym == symbol_short!("cancel");
+            }
+        }
+        false
+    });
+    assert!(has_cancel_event, "Cancel event not found");
 }
