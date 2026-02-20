@@ -30,6 +30,46 @@ export class JwtAuthService {
   
   ) {}
 
+  private parseExpirationToDate(exp: string | number): Date {
+    const now = new Date();
+
+    if (typeof exp === 'number') {
+      // treat as days
+      now.setDate(now.getDate() + exp);
+      return now;
+    }
+
+    // supports formats like '7d', '15m', '24h'
+    const match = String(exp).match(/^(\d+)([smhd])$/);
+    if (!match) {
+      // fallback: if it's just a number, treat as days
+      const asNum = parseInt(String(exp), 10);
+      now.setDate(now.getDate() + (isNaN(asNum) ? 7 : asNum));
+      return now;
+    }
+
+    const value = parseInt(match[1], 10);
+    const unit = match[2];
+
+    switch (unit) {
+      case 's':
+        now.setSeconds(now.getSeconds() + value);
+        break;
+      case 'm':
+        now.setMinutes(now.getMinutes() + value);
+        break;
+      case 'h':
+        now.setHours(now.getHours() + value);
+        break;
+      case 'd':
+      default:
+        now.setDate(now.getDate() + value);
+        break;
+    }
+
+    return now;
+  }
+
   async generateAccessToken(userId: string, walletId?: string): Promise<string> {
     const payload: JwtPayload = {
       sub: userId,
