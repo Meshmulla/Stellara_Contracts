@@ -170,8 +170,8 @@ impl PrivateTradingContract {
         env.storage().instance().set(
             &DataKey::TokenPair,
             &TokenPair {
-                base_token,
-                quote_token,
+                base_token: base_token.clone(),
+                quote_token: quote_token.clone(),
                 base_decimals: 18,
                 quote_decimals: 18,
             },
@@ -186,7 +186,7 @@ impl PrivateTradingContract {
         // Emit initialization event
         env.events().publish(
             (Symbol::new(&env, "initialized"), admin.clone()),
-            (base_token, quote_token),
+            (base_token.clone(), quote_token.clone()),
         );
 
         Ok(())

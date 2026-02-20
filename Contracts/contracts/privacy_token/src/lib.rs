@@ -141,8 +141,8 @@ impl PrivateTokenContract {
         env.storage().instance().set(
             &DataKey::Metadata,
             &TokenMetadata {
-                name,
-                symbol,
+                name: name.clone(),
+                symbol: symbol.clone(),
                 decimals,
             },
         );
@@ -164,7 +164,7 @@ impl PrivateTokenContract {
         // Emit initialization event
         env.events().publish(
             (Symbol::new(&env, "initialized"), admin.clone()),
-            (name, symbol, decimals),
+            (name.clone(), symbol.clone(), decimals),
         );
 
         Ok(())
@@ -220,9 +220,9 @@ impl PrivateTokenContract {
 
         // Emit deposit event
         env.events().publish(
-            (Symbol::new(&env, "deposit"), from),
+            (Symbol::new(&env, "deposit"), from.clone()),
             DepositEvent {
-                from: from.clone(),
+                from,
                 commitment,
                 amount,
                 leaf_index,
