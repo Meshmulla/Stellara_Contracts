@@ -39,9 +39,10 @@ import { Tenant } from './tenancy/entities/tenant.entity';
 import { TenantConfig } from './tenancy/entities/tenant-config.entity';
 import { TenantUsage } from './tenancy/entities/tenant-usage.entity';
 import { TenantInvitation } from './tenancy/entities/tenant-invitation.entity';
-import { AnalyticsModule } from './analytics/analytics.module';
-import { AnalyticsMetric } from './analytics/entities/analytics-metric.entity';
-import { AnalyticsAlert } from './analytics/entities/analytics-alert.entity';
+import { StellarEvent } from './stellar-monitor/entities/stellar-event.entity';
+import { WebhookConsumer } from './stellar-monitor/entities/webhook-consumer.entity';
+import { BlockchainModule } from './blockchain/blockchain.module';
+import { WebsocketModule } from './websocket/websocket.module';
 
 
 @Module({
@@ -82,6 +83,9 @@ import { AnalyticsAlert } from './analytics/entities/analytics-alert.entity';
             // Analytics entities
             AnalyticsMetric,
             AnalyticsAlert,
+            // Stellar Monitor entities
+            StellarEvent,
+            WebhookConsumer,
           ],
         };
 
@@ -111,6 +115,8 @@ import { AnalyticsAlert } from './analytics/entities/analytics-alert.entity';
     ThrottleModule,
     TenantModule,
     AnalyticsModule,
+    BlockchainModule,
+    WebsocketModule,
   ],
 
   controllers: [AppController],
