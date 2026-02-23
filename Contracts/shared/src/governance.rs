@@ -1,6 +1,6 @@
 use soroban_sdk::{
     Address, Env, Map, Symbol, Vec, IntoVal, TryFromVal,
-    contracttype, contractimpl, contracterror, contractevent
+    contracttype, contractimpl, contracterror, symbol_short
 };
 use crate::events::{ProposalCreatedEvent, ProposalExecutedEvent};
 use crate::events::EventEmitter;
@@ -207,7 +207,7 @@ impl GovernanceManager {
             proposer: event_proposer,
             new_contract_hash: Symbol::new(env, "upgrade"),
             target_contract: env.current_contract_address(),
-            description: Symbol::from(&event_description),
+            description: event_description,
             approval_threshold: 3,
             timelock_delay: 86400, // 24 hours
             timestamp: env.ledger().timestamp(),
@@ -324,6 +324,7 @@ impl GovernanceManager {
 
         let _new_contract_hash = proposal.new_contract_hash.clone();
 
+        let executed_new_contract_hash = proposal.new_contract_hash.clone();
         proposals.set(proposal_id, proposal);
         env.storage().persistent().set(&proposals_key, &proposals);
 
@@ -331,7 +332,7 @@ impl GovernanceManager {
         let event = ProposalExecutedEvent {
             proposal_id,
             executor,
-            new_contract_hash: proposal.new_contract_hash.clone(),
+            new_contract_hash: executed_new_contract_hash,
             timestamp: env.ledger().timestamp(),
         };
         EventEmitter::proposal_executed(env, event);

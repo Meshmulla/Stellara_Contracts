@@ -120,3 +120,23 @@ pub fn fetch_aggregate_price(
         latest_timestamp,
     })
 }
+
+pub fn check_circuit_breaker(
+    current_price: i128,
+    new_price: i128,
+    threshold_percent: u32
+) -> bool {
+    if current_price == 0 {
+        return true; // First price update is always valid
+    }
+    
+    let diff = if new_price > current_price {
+        new_price - current_price
+    } else {
+        current_price - new_price
+    };
+
+    // Check if diff / current > threshold / 100
+    // Equivalent to: diff * 100 > threshold * current
+    (diff * 100) <= (threshold_percent as i128 * current_price)
+}

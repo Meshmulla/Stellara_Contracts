@@ -201,13 +201,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cross_chain_bridge"
-version = "0.1.0"
-dependencies = [
- "soroban-sdk",
-]
-
-[[package]]
 name = "crypto-bigint"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1380,14 +1373,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stellara-identity"
-version = "0.1.0"
-dependencies = [
- "shared",
- "soroban-sdk",
-]
-
-[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1478,6 +1463,7 @@ dependencies = [
 name = "token"
 version = "0.1.0"
 dependencies = [
+ "shared",
  "soroban-sdk",
 ]
 

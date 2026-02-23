@@ -1,13 +1,13 @@
 use soroban_sdk::{
     contract, contractimpl, Address, Env, Error, IntoVal, String, Symbol, Val, Vec,
-    token, Map, U256, u64, i128, u128
+    token, Map, U256, BytesN
 };
-use shared::{admin, storage};
+use shared::admin;
 
-/// Governance token with voting power
+/// Governance token configuration
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GovernanceToken {
+#[derive(Clone, Debug, Eq, PartialEq, IntoVal, TryFromVal)]
+pub struct GovernanceConfig {
     pub token: Address,              // Underlying token
     pub total_supply: i128,           // Total governance tokens
     pub voting_power_multiplier: u32,  // Multiplier for voting power
@@ -21,7 +21,7 @@ pub struct GovernanceToken {
 
 /// Voting power calculation
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, IntoVal, TryFromVal)]
 pub struct VotingPower {
     pub user: Address,
     pub token_amount: i128,
@@ -32,7 +32,7 @@ pub struct VotingPower {
 
 /// Proposal structure
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, IntoVal, TryFromVal)]
 pub struct Proposal {
     pub proposal_id: u64,
     pub proposer: Address,
@@ -54,7 +54,7 @@ pub struct Proposal {
 
 /// Proposal types
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, IntoVal, TryFromVal)]
 pub enum ProposalType {
     TokenTransfer,        // Transfer tokens from treasury
     ParameterChange,      // Change governance parameters
@@ -65,7 +65,7 @@ pub enum ProposalType {
 
 /// Proposal status
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, IntoVal, TryFromVal)]
 pub enum ProposalStatus {
     Pending,
     Active,
@@ -78,7 +78,7 @@ pub enum ProposalStatus {
 
 /// Vote record
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, IntoVal, TryFromVal)]
 pub struct Vote {
     pub voter: Address,
     pub proposal_id: u64,
@@ -89,7 +89,7 @@ pub struct Vote {
 
 /// Vote types
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, IntoVal, TryFromVal)]
 pub enum VoteType {
     For,
     Against,
@@ -114,6 +114,18 @@ pub enum GovernanceError {
     QuorumNotReached = 11,
     EmergencyOnly = 12,
     InsufficientVotingPower = 13,
+}
+
+impl From<GovernanceError> for Error {
+    fn from(err: GovernanceError) -> Self {
+        Error::from((soroban_sdk::xdr::ScErrorType::Contract, soroban_sdk::xdr::ScErrorCode::InvalidAction))
+    }
+}
+
+impl From<&GovernanceError> for Error {
+    fn from(err: &GovernanceError) -> Self {
+        Error::from((soroban_sdk::xdr::ScErrorType::Contract, soroban_sdk::xdr::ScErrorCode::InvalidAction))
+    }
 }
 
 /// Governance events
@@ -193,7 +205,7 @@ impl GovernanceToken {
         storage::set_admin(&env, &admin);
 
         // Initialize governance token
-        let governance = GovernanceToken {
+        let governance = GovernanceConfig {
             token: token.clone(),
             total_supply: 0,
             voting_power_multiplier,
@@ -409,9 +421,17 @@ impl GovernanceToken {
 
         storage::set_proposal(&env, proposal_id, &proposal);
 
+        let voted_event = VotedEvent {
+            voter: voter.clone(),
+            proposal_id,
+            vote_type: vote_type.clone(),
+            voting_power: voting_power.voting_power,
+            timestamp: current_time,
+        };
+
         env.events().publish(
             (Symbol::new(&env, "voted"), voter),
-            (proposal_id, vote_type, voting_power.voting_power, current_time),
+            voted_event,
         );
 
         Ok(())
@@ -522,7 +542,7 @@ impl GovernanceToken {
     }
 
     /// Get governance token information
-    pub fn get_governance_info(env: Env) -> GovernanceToken {
+    pub fn get_governance_info(env: Env) -> GovernanceConfig {
         storage::get_governance_token(&env)
     }
 
@@ -590,13 +610,13 @@ pub mod storage {
             .unwrap()
     }
 
-    pub fn set_governance_token(env: &Env, governance: &GovernanceToken) {
+    pub fn set_governance_token(env: &Env, governance: &GovernanceConfig) {
         env.storage()
             .persistent()
             .set(&Symbol::new(env, GOVERNANCE_KEY), governance);
     }
 
-    pub fn get_governance_token(env: &Env) -> GovernanceToken {
+    pub fn get_governance_token(env: &Env) -> GovernanceConfig {
         env.storage()
             .persistent()
             .get(&Symbol::new(env, GOVERNANCE_KEY))

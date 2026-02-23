@@ -15,6 +15,7 @@ pub mod fees;
 pub mod oracle;
 pub mod privacy;
 pub mod storage;
+pub mod governance;
 
 /// Standard contract error codes
 pub mod errors {
