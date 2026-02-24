@@ -1,5 +1,17 @@
-import { IsString, IsUrl, IsOptional, IsInt, Min, Max, IsBoolean, Length } from 'class-validator';
+import {
+  IsString,
+  IsUrl,
+  IsOptional,
+  IsInt,
+  Min,
+  Max,
+  IsBoolean,
+  Length,
+  IsArray,
+  IsEnum,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
+import { EventType } from '../types/stellar.types';
 
 export class UpdateConsumerDto {
   @IsOptional()
@@ -34,4 +46,19 @@ export class UpdateConsumerDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsEnum(EventType, { each: true })
+  eventTypes?: EventType[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  contractIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  accounts?: string[];
 }
