@@ -58,7 +58,7 @@
   - **Property 10: Timelock calculation from final approval**
   - **Validates: Requirements 4.4**
 
-- [ ] 5. Enhance event emission system
+- [x] 5. Enhance event emission system
   - Add new event types: `ValidationFailedEvent`, `ProposalHaltedEvent`, `ProposalResumedEvent`, `ApprovalRevokedEvent`
   - Update existing events to include metadata fields
   - Add event emission to all new functions (halt, resume, revoke)

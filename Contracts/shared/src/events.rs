@@ -29,6 +29,7 @@ pub mod topics {
     pub const PROPOSAL_HALTED: Symbol = symbol_short!("halt");
     pub const PROPOSAL_RESUMED: Symbol = symbol_short!("resume");
     pub const APPROVAL_REVOKED: Symbol = symbol_short!("revoke");
+    pub const VALIDATION_FAILED: Symbol = symbol_short!("valfail");
 
     // Social rewards events
     pub const REWARD_ADDED: Symbol = symbol_short!("reward");
@@ -224,6 +225,20 @@ pub struct ApprovalRevokedEvent {
     pub timestamp: u64,
 }
 
+/// Event emitted when validation fails
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct ValidationFailedEvent {
+    /// Proposer address
+    pub proposer: Address,
+    /// Validation error code
+    pub error_code: u32,
+    /// Description of what failed
+    pub reason: Symbol,
+    /// Block timestamp
+    pub timestamp: u64,
+}
+
 // =============================================================================
 // Social Rewards Events
 // =============================================================================
@@ -330,6 +345,11 @@ impl EventEmitter {
     /// Emit an approval revoked event
     pub fn approval_revoked(env: &Env, event: ApprovalRevokedEvent) {
         env.events().publish((topics::APPROVAL_REVOKED,), event);
+    }
+
+    /// Emit a validation failed event
+    pub fn validation_failed(env: &Env, event: ValidationFailedEvent) {
+        env.events().publish((topics::VALIDATION_FAILED,), event);
     }
 
     /// Emit a reward added event
