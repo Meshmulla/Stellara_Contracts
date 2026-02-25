@@ -75,7 +75,9 @@ describe('DeployContractProcessor', () => {
         initializer: 'init-func',
       });
 
-      await expect(processor.handleDeployContract(job as any)).rejects.toThrow();
+      await expect(
+        processor.handleDeployContract(job as any),
+      ).rejects.toThrow();
     });
 
     it('should include network in result', async () => {

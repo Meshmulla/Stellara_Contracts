@@ -9,4 +9,4 @@ import { ObservabilityModule } from '../observability/observability.module';
   providers: [ThrottleService, ThrottleGuard],
   exports: [ThrottleGuard, ThrottleService],
 })
-export class ThrottleModule { }
+export class ThrottleModule {}

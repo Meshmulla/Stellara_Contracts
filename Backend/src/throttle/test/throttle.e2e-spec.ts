@@ -27,7 +27,8 @@ describe('ThrottleController (e2e)', () => {
   });
 
   it('should enforce auth rate limit and return 429 after 5 requests', async () => {
-    const publicKey = 'G...', nonce = '...';
+    const publicKey = 'G...',
+      nonce = '...';
 
     for (let i = 0; i < 5; i++) {
       const res = await request(app.getHttpServer())

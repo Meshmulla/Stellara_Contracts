@@ -15,7 +15,7 @@ export class ThrottleGuard implements CanActivate {
   constructor(
     private readonly throttle: ThrottleService,
     private readonly reflector: Reflector,
-  ) { }
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
@@ -43,14 +43,13 @@ export class ThrottleGuard implements CanActivate {
 
     const key = `rate:${strategyName || (req.path.includes('/auth') ? 'AUTH' : 'GLOBAL')}:${identifier}`;
 
-    const { current, limit, ttl } =
-      await this.throttle.checkRateLimit(
-        key,
-        strategy.limit,
-        strategy.window,
-        role,
-        strategyName || (req.path.includes('/auth') ? 'AUTH' : 'GLOBAL'),
-      );
+    const { current, limit, ttl } = await this.throttle.checkRateLimit(
+      key,
+      strategy.limit,
+      strategy.window,
+      role,
+      strategyName || (req.path.includes('/auth') ? 'AUTH' : 'GLOBAL'),
+    );
 
     res.setHeader('X-RateLimit-Limit', limit);
     res.setHeader('X-RateLimit-Remaining', Math.max(0, limit - current));
@@ -61,7 +60,10 @@ export class ThrottleGuard implements CanActivate {
         identifier,
         strategyName || (req.path.includes('/auth') ? 'AUTH' : 'GLOBAL'),
       );
-      throw new HttpException('Rate limit exceeded', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'Rate limit exceeded',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     return true;

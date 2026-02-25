@@ -9,7 +9,9 @@ describe('AppController', () => {
   beforeEach(async () => {
     const mockThrottleService = {
       checkBan: jest.fn(),
-      checkRateLimit: jest.fn().mockResolvedValue({ current: 1, limit: 100, ttl: 60 }),
+      checkRateLimit: jest
+        .fn()
+        .mockResolvedValue({ current: 1, limit: 100, ttl: 60 }),
       registerViolation: jest.fn(),
     };
 

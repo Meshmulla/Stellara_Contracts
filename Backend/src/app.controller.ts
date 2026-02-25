@@ -6,7 +6,7 @@ import { ThrottleStrategy } from './throttle/throttle.decorator';
 @Controller()
 @UseGuards(ThrottleGuard)
 export class AppController {
-  constructor(private readonly appService: AppService) { }
+  constructor(private readonly appService: AppService) {}
 
   @Get()
   @ThrottleStrategy('GLOBAL')
