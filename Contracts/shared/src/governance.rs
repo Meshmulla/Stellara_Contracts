@@ -1,7 +1,8 @@
 use soroban_sdk::{contracttype, Address, Env, Vec, Symbol, symbol_short};
 use crate::events::{
     EventEmitter, ProposalCreatedEvent, ProposalApprovedEvent, ProposalRejectedEvent,
-    ProposalExecutedEvent, ProposalCancelledEvent,
+    ProposalExecutedEvent, ProposalCancelledEvent, ProposalHaltedEvent, ProposalResumedEvent,
+    ApprovalRevokedEvent,
 };
 
 /// Upgrade proposal that must be approved via governance
@@ -291,6 +292,8 @@ impl HaltModule {
         proposal.halt_reason = symbol_short!("");
         proposal.halted_at = 0;
 
+        let new_exec_time = proposal.execution_time;
+
         proposals.set(proposal_id, proposal);
         env.storage().persistent().set(&proposals_key, &proposals);
 
@@ -298,7 +301,7 @@ impl HaltModule {
         EventEmitter::proposal_resumed(env, ProposalResumedEvent {
             proposal_id,
             resumed_by: admin,
-            new_execution_time: proposal.execution_time,
+            new_execution_time: new_exec_time,
             timestamp: env.ledger().timestamp(),
         });
 

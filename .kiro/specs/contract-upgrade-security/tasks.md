@@ -89,7 +89,7 @@
   - Add `get_time_to_execution` query function wrapper
   - _Requirements: All_
 
-- [ ] 8. Checkpoint - Ensure all tests pass
+- [x] 8. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 9. Write comprehensive integration tests
