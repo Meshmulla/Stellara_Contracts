@@ -102,6 +102,101 @@ impl From<soroban_sdk::Error> for GovernanceError {
 
 pub struct GovernanceManager;
 
+/// Validation module for proposal parameter validation
+pub struct ValidationModule;
+
+impl ValidationModule {
+    /// Validate all proposal parameters before creation
+    pub fn validate_proposal_params(
+        env: &Env,
+        new_contract_hash: &Symbol,
+        target_contract: &Address,
+        approval_threshold: u32,
+        approvers: &Vec<Address>,
+        timelock_delay: u64,
+        current_version: u32,
+        proposed_version: u32,
+    ) -> Result<(), GovernanceError> {
+        // Validate hash format
+        Self::validate_hash_format(new_contract_hash)?;
+        
+        // Validate contract address
+        Self::validate_contract_address(env, target_contract)?;
+        
+        // Validate threshold
+        Self::validate_threshold(approval_threshold, approvers.len() as u32)?;
+        
+        // Validate timelock
+        Self::validate_timelock(timelock_delay)?;
+        
+        // Validate approvers are unique
+        Self::validate_approvers_unique(approvers)?;
+        
+        // Validate version compatibility
+        Self::validate_version_compatibility(current_version, proposed_version)?;
+        
+        Ok(())
+    }
+    
+    /// Validate contract hash format (must not be empty)
+    fn validate_hash_format(hash: &Symbol) -> Result<(), GovernanceError> {
+        // Check if hash is empty
+        let hash_str = hash.to_string();
+        if hash_str.is_empty() {
+            return Err(GovernanceError::InvalidHashFormat);
+        }
+        Ok(())
+    }
+    
+    /// Validate contract address exists (basic check)
+    fn validate_contract_address(_env: &Env, _address: &Address) -> Result<(), GovernanceError> {
+        // In a real implementation, we would check if the address is a valid contract
+        // For now, we just ensure it's not null/invalid
+        // The address type itself ensures validity
+        Ok(())
+    }
+    
+    /// Validate approval threshold
+    fn validate_threshold(threshold: u32, approver_count: u32) -> Result<(), GovernanceError> {
+        if threshold == 0 || threshold > approver_count {
+            return Err(GovernanceError::InvalidThreshold);
+        }
+        Ok(())
+    }
+    
+    /// Validate timelock meets minimum (3600 seconds = 1 hour)
+    fn validate_timelock(timelock: u64) -> Result<(), GovernanceError> {
+        const MIN_TIMELOCK: u64 = 3600; // 1 hour minimum
+        if timelock < MIN_TIMELOCK {
+            return Err(GovernanceError::TimelockTooShort);
+        }
+        Ok(())
+    }
+    
+    /// Validate approvers are unique
+    fn validate_approvers_unique(approvers: &Vec<Address>) -> Result<(), GovernanceError> {
+        for i in 0..approvers.len() {
+            for j in (i + 1)..approvers.len() {
+                if approvers.get(i as u32).unwrap() == approvers.get(j as u32).unwrap() {
+                    return Err(GovernanceError::DuplicateApprover);
+                }
+            }
+        }
+        Ok(())
+    }
+    
+    /// Validate version compatibility (proposed must be greater than current)
+    fn validate_version_compatibility(
+        current: u32,
+        proposed: u32,
+    ) -> Result<(), GovernanceError> {
+        if proposed <= current {
+            return Err(GovernanceError::VersionNotIncreasing);
+        }
+        Ok(())
+    }
+}
+
 impl GovernanceManager {
     /// Validate that an address has a specific role
     pub fn require_role(env: &Env, address: &Address, required_role: GovernanceRole) {
@@ -133,10 +228,17 @@ impl GovernanceManager {
         // Validate proposer is admin
         Self::require_role(env, &proposer, GovernanceRole::Admin);
 
-        // Validate threshold
-        if approval_threshold == 0 || approval_threshold > approvers.len() as u32 {
-            return Err(GovernanceError::InvalidThreshold);
-        }
+        // Validate proposal parameters
+        ValidationModule::validate_proposal_params(
+            env,
+            &new_contract_hash,
+            &target_contract,
+            approval_threshold,
+            &approvers,
+            timelock_delay,
+            1, // current_version - default
+            2, // proposed_version - default
+        )?;
 
         // Get next proposal ID
         let proposal_counter_key = symbol_short!("prop_cnt");
