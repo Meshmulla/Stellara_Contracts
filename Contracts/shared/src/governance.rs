@@ -322,6 +322,212 @@ impl HaltModule {
     }
 }
 
+/// Approval module for enhanced approval workflows
+pub struct ApprovalModule;
+
+impl ApprovalModule {
+    /// Approve with cooling-off period check
+    pub fn approve_with_cooling_off(
+        env: &Env,
+        proposal_id: u64,
+        approver: Address,
+    ) -> Result<(), GovernanceError> {
+        // Validate approver has permission
+        GovernanceManager::require_role(env, &approver, GovernanceRole::Approver);
+
+        let proposals_key = symbol_short!("props");
+        let mut proposals: soroban_sdk::Map<u64, UpgradeProposal> = env
+            .storage()
+            .persistent()
+            .get(&proposals_key)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+
+        let mut proposal = proposals
+            .get(proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+
+        // Check cooling-off period
+        Self::check_cooling_off_period(env, &proposal)?;
+
+        // Validate proposal status
+        if proposal.status != ProposalStatus::Pending {
+            return Err(GovernanceError::InvalidProposal);
+        }
+
+        // Validate approver is in the list
+        if !proposal.approvers.iter().any(|a| a == approver) {
+            return Err(GovernanceError::Unauthorized);
+        }
+
+        // Check for duplicate approval
+        let approvals_key = symbol_short!("apprv");
+        let mut approvals: soroban_sdk::Map<(u64, Address), bool> = env
+            .storage()
+            .persistent()
+            .get(&approvals_key)
+            .unwrap_or_else(|| soroban_sdk::Map::new(env));
+
+        if approvals.get((proposal_id, approver.clone())).is_some() {
+            return Err(GovernanceError::DuplicateApproval);
+        }
+
+        // Record approval
+        approvals.set((proposal_id, approver.clone()), true);
+        env.storage().persistent().set(&approvals_key, &approvals);
+
+        // Record approval timestamp
+        Self::record_approval_timestamp(env, proposal_id, &approver, env.ledger().timestamp());
+
+        // Increment approval count
+        proposal.approvals_count += 1;
+
+        // Check if threshold reached
+        if proposal.approvals_count >= proposal.approval_threshold {
+            proposal.status = ProposalStatus::Approved;
+            // Update execution time from final approval timestamp
+            proposal.execution_time = env.ledger().timestamp() + (proposal.execution_time - proposal.created_at);
+        }
+
+        let current_approvals = proposal.approvals_count;
+        let threshold = proposal.approval_threshold;
+
+        proposals.set(proposal_id, proposal);
+        env.storage().persistent().set(&proposals_key, &proposals);
+
+        // Emit proposal approved event
+        EventEmitter::proposal_approved(env, ProposalApprovedEvent {
+            proposal_id,
+            approver,
+            current_approvals,
+            threshold,
+            timestamp: env.ledger().timestamp(),
+        });
+
+        Ok(())
+    }
+    
+    /// Revoke an approval before execution
+    pub fn revoke_approval(
+        env: &Env,
+        proposal_id: u64,
+        approver: Address,
+    ) -> Result<(), GovernanceError> {
+        // Validate approver has permission
+        GovernanceManager::require_role(env, &approver, GovernanceRole::Approver);
+
+        let proposals_key = symbol_short!("props");
+        let mut proposals: soroban_sdk::Map<u64, UpgradeProposal> = env
+            .storage()
+            .persistent()
+            .get(&proposals_key)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+
+        let mut proposal = proposals
+            .get(proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+
+        // Cannot revoke if already executed
+        if proposal.executed {
+            return Err(GovernanceError::InvalidProposal);
+        }
+
+        // Check if approval exists
+        let approvals_key = symbol_short!("apprv");
+        let mut approvals: soroban_sdk::Map<(u64, Address), bool> = env
+            .storage()
+            .persistent()
+            .get(&approvals_key)
+            .unwrap_or_else(|| soroban_sdk::Map::new(env));
+
+        if approvals.get((proposal_id, approver.clone())).is_none() {
+            return Err(GovernanceError::ApprovalNotFound);
+        }
+
+        // Cannot revoke if threshold already reached and approved
+        if proposal.status == ProposalStatus::Approved {
+            return Err(GovernanceError::CannotRevokeAfterThreshold);
+        }
+
+        // Remove approval
+        approvals.remove((proposal_id, approver.clone()));
+        env.storage().persistent().set(&approvals_key, &approvals);
+
+        // Decrement approval count
+        if proposal.approvals_count > 0 {
+            proposal.approvals_count -= 1;
+        }
+
+        proposals.set(proposal_id, proposal);
+        env.storage().persistent().set(&proposals_key, &proposals);
+
+        // Emit approval revoked event
+        EventEmitter::approval_revoked(env, ApprovalRevokedEvent {
+            proposal_id,
+            approver,
+            timestamp: env.ledger().timestamp(),
+        });
+
+        Ok(())
+    }
+    
+    /// Get time remaining until execution possible
+    pub fn get_time_to_execution(
+        env: &Env,
+        proposal_id: u64,
+    ) -> Result<u64, GovernanceError> {
+        let proposals_key = symbol_short!("props");
+        let proposals: soroban_sdk::Map<u64, UpgradeProposal> = env
+            .storage()
+            .persistent()
+            .get(&proposals_key)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+
+        let proposal = proposals
+            .get(proposal_id)
+            .ok_or(GovernanceError::ProposalNotFound)?;
+
+        let current_time = env.ledger().timestamp();
+        if current_time >= proposal.execution_time {
+            Ok(0) // Can execute now
+        } else {
+            Ok(proposal.execution_time - current_time)
+        }
+    }
+    
+    /// Record approval timestamp
+    fn record_approval_timestamp(
+        env: &Env,
+        proposal_id: u64,
+        approver: &Address,
+        timestamp: u64,
+    ) {
+        let timestamp_key = symbol_short!("appr_ts");
+        let mut timestamps: soroban_sdk::Map<(u64, Address), u64> = env
+            .storage()
+            .persistent()
+            .get(&timestamp_key)
+            .unwrap_or_else(|| soroban_sdk::Map::new(env));
+
+        timestamps.set((proposal_id, approver.clone()), timestamp);
+        env.storage().persistent().set(&timestamp_key, &timestamps);
+    }
+    
+    /// Check if cooling-off period has passed
+    fn check_cooling_off_period(
+        env: &Env,
+        proposal: &UpgradeProposal,
+    ) -> Result<(), GovernanceError> {
+        let current_time = env.ledger().timestamp();
+        let cooling_off_end = proposal.created_at + proposal.cooling_off_period;
+        
+        if current_time < cooling_off_end {
+            return Err(GovernanceError::CoolingOffNotExpired);
+        }
+        
+        Ok(())
+    }
+}
+
 impl GovernanceManager {
     /// Validate that an address has a specific role
     pub fn require_role(env: &Env, address: &Address, required_role: GovernanceRole) {
@@ -443,70 +649,8 @@ impl GovernanceManager {
         proposal_id: u64,
         approver: Address,
     ) -> Result<(), GovernanceError> {
-        // Validate approver has permission
-        Self::require_role(env, &approver, GovernanceRole::Approver);
-
-        let proposals_key = symbol_short!("props");
-        let mut proposals: soroban_sdk::Map<u64, UpgradeProposal> = env
-            .storage()
-            .persistent()
-            .get(&proposals_key)
-            .ok_or(GovernanceError::ProposalNotFound)?;
-
-        let mut proposal = proposals
-            .get(proposal_id)
-            .ok_or(GovernanceError::ProposalNotFound)?;
-
-        // Validate proposal status
-        if proposal.status != ProposalStatus::Pending {
-            return Err(GovernanceError::InvalidProposal);
-        }
-
-        // Validate approver is in the list
-        if !proposal.approvers.iter().any(|a| a == approver) {
-            return Err(GovernanceError::Unauthorized);
-        }
-
-        // Check for duplicate approval
-        let approvals_key = symbol_short!("apprv");
-        let mut approvals: soroban_sdk::Map<(u64, Address), bool> = env
-            .storage()
-            .persistent()
-            .get(&approvals_key)
-            .unwrap_or_else(|| soroban_sdk::Map::new(env));
-
-        if approvals.get((proposal_id, approver.clone())).is_some() {
-            return Err(GovernanceError::DuplicateApproval);
-        }
-
-        // Record approval
-        approvals.set((proposal_id, approver.clone()), true);
-        env.storage().persistent().set(&approvals_key, &approvals);
-
-        // Increment approval count
-        proposal.approvals_count += 1;
-
-        // Check if threshold reached
-        if proposal.approvals_count >= proposal.approval_threshold {
-            proposal.status = ProposalStatus::Approved;
-        }
-
-        let current_approvals = proposal.approvals_count;
-        let threshold = proposal.approval_threshold;
-
-        proposals.set(proposal_id, proposal);
-        env.storage().persistent().set(&proposals_key, &proposals);
-
-        // Emit proposal approved event
-        EventEmitter::proposal_approved(env, ProposalApprovedEvent {
-            proposal_id,
-            approver,
-            current_approvals,
-            threshold,
-            timestamp: env.ledger().timestamp(),
-        });
-
-        Ok(())
+        // Use the enhanced approval module
+        ApprovalModule::approve_with_cooling_off(env, proposal_id, approver)
     }
 
     /// Execute an approved proposal (only after timelock expires)
