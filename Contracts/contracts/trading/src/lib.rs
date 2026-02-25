@@ -1,15 +1,15 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Symbol, symbol_short, IntoVal};
-use shared::state_verification::{verify_with_contract, trust_add, is_trusted};
-use shared::fees::{FeeManager, FeeError};
-use shared::governance::{
-    GovernanceManager, GovernanceRole, UpgradeProposal,
-};
 use shared::events::{
     ContractPausedEvent, ContractUnpausedEvent, EventEmitter, FeeCollectedEvent, TradeExecutedEvent,
 };
 use shared::fees::{FeeError, FeeManager};
+use shared::fees::{FeeError, FeeManager};
 use shared::governance::{GovernanceManager, GovernanceRole, UpgradeProposal};
+use shared::governance::{GovernanceManager, GovernanceRole, UpgradeProposal};
+use shared::state_verification::{is_trusted, trust_add, verify_with_contract};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, symbol_short, Address, Env, IntoVal, Symbol,
+};
 use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, Symbol};
 
 /// Version of this contract implementation
@@ -125,7 +125,12 @@ impl UpgradeableTradingContract {
         trust_add(&env, &contract);
     }
 
-    pub fn verify_external_balance(env: Env, token: Address, holder: Address, expected: i128) -> bool {
+    pub fn verify_external_balance(
+        env: Env,
+        token: Address,
+        holder: Address,
+        expected: i128,
+    ) -> bool {
         if !is_trusted(&env, &token) {
             return false;
         }
