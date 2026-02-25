@@ -131,7 +131,8 @@ export class EncryptionService {
 
   private async deriveKey(data: string): Promise<Buffer> {
     const salt = crypto.randomBytes(32);
-    return crypto.scrypt(data, 'salt', 64, 32, (err: Error | null, derivedKey: Buffer) => {
+    const key = (await scrypt(data, salt, 32)) as Buffer;
+    return key;
   }
 
   private generateKeyId(): string {
