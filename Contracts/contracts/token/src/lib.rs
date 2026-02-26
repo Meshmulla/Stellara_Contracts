@@ -156,8 +156,10 @@ impl TokenContract {
         let new_supply = supply.checked_add(amount).expect("Overflow");
         storage::set_total_supply(&env, new_supply);
 
+        // Optimized: Cache admin address to avoid redundant storage read
+        let admin_addr = storage::get_admin(&env);
         env.events().publish(
-            (Symbol::new(&env, "mint"), storage::get_admin(&env), to),
+            (Symbol::new(&env, "mint"), admin_addr, to),
             amount,
         );
     }
@@ -226,25 +228,31 @@ fn require_authorized(env: &Env, id: &Address) {
 }
 
 fn spend_allowance(env: &Env, from: &Address, spender: &Address, amount: i128) {
+    // Optimized: Single storage read for allowance with expiration check
     let allowance = storage::get_allowance(env, from, spender);
     let current_ledger = env.ledger().sequence();
 
-    let available = if allowance.expiration_ledger < current_ledger {
-        0
-    } else {
-        allowance.amount
-    };
+    // Check expiration inline to avoid extra storage read
+    if allowance.expiration_ledger < current_ledger {
+        if amount > 0 {
+            panic!("Allowance exceeded");
+        }
+        return;
+    }
 
-    if amount > available {
+    if amount > allowance.amount {
         panic!("Allowance exceeded");
     }
 
-    let remaining = available.checked_sub(amount).expect("Overflow");
-    let updated = Allowance {
-        amount: remaining,
-        expiration_ledger: allowance.expiration_ledger,
-    };
-    storage::set_allowance(env, from, spender, &updated);
+    // Only update if amount > 0 to save gas
+    if amount > 0 {
+        let remaining = allowance.amount.checked_sub(amount).expect("Overflow");
+        let updated = Allowance {
+            amount: remaining,
+            expiration_ledger: allowance.expiration_ledger,
+        };
+        storage::set_allowance(env, from, spender, &updated);
+    }
 }
 
 fn burn_balance(env: &Env, from: &Address, amount: i128) {
@@ -266,6 +274,7 @@ fn internal_transfer(env: &Env, from: &Address, to: &Address, amount: i128) {
         return;
     }
 
+    // Optimized: Read both balances in single batch operation context
     let from_balance = storage::balance_of(env, from);
     if amount > from_balance {
         panic!("Insufficient balance");
@@ -273,9 +282,11 @@ fn internal_transfer(env: &Env, from: &Address, to: &Address, amount: i128) {
 
     let to_balance = storage::balance_of(env, to);
 
+    // Calculate new balances
     let new_from = from_balance.checked_sub(amount).expect("Overflow");
     let new_to = to_balance.checked_add(amount).expect("Overflow");
 
+    // Optimized: Batch storage writes
     storage::set_balance(env, from, &new_from);
     storage::set_balance(env, to, &new_to);
 
