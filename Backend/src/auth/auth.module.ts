@@ -89,6 +89,7 @@ import { ThrottleModule } from '../throttle/throttle.module';
     JwtAuthGuard,
     ApiTokenGuard,
     RolesGuard,
+    TypeOrmModule,
   ],
 })
 export class AuthModule {}
