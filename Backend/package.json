@@ -23,7 +23,11 @@
     "migration:generate": "npm run typeorm -- migration:generate -d src/database/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/database/data-source.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d src/database/data-source.ts",
-    "migration:show": "npm run typeorm -- migration:show -d src/database/data-source.ts"
+    "migration:show": "npm run typeorm -- migration:show -d src/database/data-source.ts",
+    "migration:dry-run": "node scripts/migration-cli.js dry-run",
+    "migration:validate": "node scripts/migration-cli.js validate",
+    "migration:safe-run": "node scripts/migration-cli.js run",
+    "migration:rollback": "node scripts/migration-cli.js rollback"
   },
   "dependencies": {
     "@apollo/server": "^5.4.0",

@@ -1,0 +1,129 @@
+name: Database Migration CI
+
+on:
+  pull_request:
+    paths:
+      - 'Backend/src/database/migrations/**'
+      - 'Backend/src/database/data-source.ts'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'Backend/src/database/migrations/**'
+
+jobs:
+  migration-validation:
+    name: Validate Migrations
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: stellara_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: Backend
+        run: npm ci
+
+      - name: Setup test environment
+        working-directory: Backend
+        run: |
+          cp .env.example .env.test
+          echo "DB_HOST=localhost" >> .env.test
+          echo "DB_PORT=5432" >> .env.test
+          echo "DB_USER=test" >> .env.test
+          echo "DB_PASSWORD=test" >> .env.test
+          echo "DB_NAME=stellara_test" >> .env.test
+
+      - name: Run migration dry-run
+        working-directory: Backend
+        run: node scripts/migration-cli.js dry-run
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: test
+          DB_PASSWORD: test
+          DB_NAME: stellara_test
+
+      - name: Run migrations
+        working-directory: Backend
+        run: npm run migration:run
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: test
+          DB_PASSWORD: test
+          DB_NAME: stellara_test
+
+      - name: Verify migrations
+        working-directory: Backend
+        run: npm run migration:show
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: test
+          DB_PASSWORD: test
+          DB_NAME: stellara_test
+
+      - name: Test rollback
+        working-directory: Backend
+        run: npm run migration:revert
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: test
+          DB_PASSWORD: test
+          DB_NAME: stellara_test
+
+      - name: Upload migration logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: migration-logs
+          path: Backend/migration-execution.log
+
+  migration-tests:
+    name: Run Migration Tests
+    runs-on: ubuntu-latest
+    needs: migration-validation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: Backend
+        run: npm ci
+
+      - name: Run migration framework tests
+        working-directory: Backend
+        run: npm test -- migration-framework
