@@ -1,9 +1,10 @@
 #![no_std]
 
-use soroban_sdk::{
-    contract, contractimpl, Address, BytesN, Env, Error, IntoVal, String, Symbol, Val, Vec, TryFromVal,
-};
 use shared::state_verification::{compute_commitment, make_proof, StateProof};
+use soroban_sdk::{
+    contract, contractimpl, Address, BytesN, Env, Error, IntoVal, String, Symbol, TryFromVal, Val,
+    Vec,
+};
 
 mod admin;
 mod storage;
@@ -22,7 +23,14 @@ impl TokenContract {
         }
         admin.require_auth();
         storage::set_admin(&env, &admin);
-        storage::set_metadata(&env, &TokenMetadata { name, symbol, decimals });
+        storage::set_metadata(
+            &env,
+            &TokenMetadata {
+                name,
+                symbol,
+                decimals,
+            },
+        );
         storage::set_total_supply(&env, 0);
     }
 
@@ -31,7 +39,13 @@ impl TokenContract {
         storage::get_allowance_amount(&env, &from, &spender)
     }
 
-    pub fn approve(env: Env, from: Address, spender: Address, amount: i128, expiration_ledger: u32) {
+    pub fn approve(
+        env: Env,
+        from: Address,
+        spender: Address,
+        amount: i128,
+        expiration_ledger: u32,
+    ) {
         from.require_auth();
         ensure_nonnegative(amount);
 
@@ -111,10 +125,8 @@ impl TokenContract {
         let current_admin = storage::get_admin(&env);
         current_admin.require_auth();
         storage::set_admin(&env, &new_admin);
-        env.events().publish(
-            (Symbol::new(&env, "set_admin"), current_admin),
-            new_admin,
-        );
+        env.events()
+            .publish((Symbol::new(&env, "set_admin"), current_admin), new_admin);
     }
 
     pub fn admin(env: Env) -> Address {
@@ -124,10 +136,8 @@ impl TokenContract {
     pub fn set_authorized(env: Env, id: Address, authorize: bool) {
         admin::require_admin(&env);
         storage::set_authorized(&env, &id, authorize);
-        env.events().publish(
-            (Symbol::new(&env, "set_authorized"), id),
-            authorize,
-        );
+        env.events()
+            .publish((Symbol::new(&env, "set_authorized"), id), authorize);
     }
 
     pub fn authorized(env: Env, id: Address) -> bool {
@@ -160,7 +170,11 @@ impl TokenContract {
 
         burn_balance(&env, &from, amount);
         env.events().publish(
-            (Symbol::new(&env, "clawback"), storage::get_admin(&env), from),
+            (
+                Symbol::new(&env, "clawback"),
+                storage::get_admin(&env),
+                from,
+            ),
             amount,
         );
     }
@@ -178,7 +192,13 @@ impl TokenContract {
             if actual != tuple.1 {
                 panic!("MISMATCH");
             }
-            return compute_commitment(&env, &env.current_contract_address(), &key, &subject, env.ledger().sequence());
+            return compute_commitment(
+                &env,
+                &env.current_contract_address(),
+                &key,
+                &subject,
+                env.ledger().sequence(),
+            );
         }
         panic!("UNSUPPORTED");
     }
@@ -186,7 +206,12 @@ impl TokenContract {
     pub fn get_balance_proof(env: Env, id: Address) -> StateProof {
         let bal = storage::balance_of(&env, &id);
         let subject = (id, bal).into_val(&env);
-        make_proof(&env, &env.current_contract_address(), &Symbol::new(&env, "balance"), &subject)
+        make_proof(
+            &env,
+            &env.current_contract_address(),
+            &Symbol::new(&env, "balance"),
+            &subject,
+        )
     }
 }
 
